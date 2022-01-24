@@ -1,1 +1,2 @@
-from . import RemoteClient, myRemoteException, LOGGER
+from .client import RemoteClient, myRemoteException
+from .log import LOGGER

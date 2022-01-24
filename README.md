@@ -1,4 +1,4 @@
-# LXDEV: Remote dev tools with LXD
+# LXDEV: Container dev tools with LXD
 
 This is a python library for interacting with LXD containers in order to do containerised development.
 
@@ -17,3 +17,6 @@ host $ pip3 install --editable <this-directory> #  so source code changes will b
 
 
 
+## Todo
+
+- add tests
