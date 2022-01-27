@@ -9,5 +9,8 @@ setup(
 	install_requires=[
         "loguru",
 		"paramiko"
-    ]
+    ],
+	 entry_points = {
+        'console_scripts': ['lxdev=lxdev.standalone_cli:main'],
+    }
 )

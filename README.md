@@ -16,7 +16,7 @@ host $ pip3 install --editable <this-directory> #  so source code changes will b
 ```
 
 
-
 ## Todo
 
 - add tests
+- can we interact with lxdev using command line options / entry points?
