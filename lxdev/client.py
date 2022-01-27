@@ -272,15 +272,17 @@ class RemoteClient:
 				# self.execute_commands(f"mkdir -p /home/ubuntu/Documents/Outputs") # make remote directory tree if it doesn't exist
 
 				log_str = f"Used rsync from local {abs_local_dir} to {self.host}:{abs_remote_dir}"
-				cmd = f"rsync -avPz {abs_local_dir}/ -e {fake_ssh_fp.name} {self.lxd_container_name}:{abs_remote_dir}/{' --delete' if delete else ''}"
+				cmd = f"rsync -avz {abs_local_dir}/ -e {fake_ssh_fp.name} {self.lxd_container_name}:{abs_remote_dir}/{' --delete' if delete else ''}"
 
 			elif direction == "remote_to_local":
 				log_str = f"Used rsync from {self.host}:{abs_remote_dir} to local {abs_local_dir}"
-				cmd = f"rsync -avPz -e {fake_ssh_fp.name} {self.lxd_container_name}:{abs_remote_dir}/ {abs_local_dir}/{' --delete' if delete else ''}"
+				cmd = f"rsync -avz -e {fake_ssh_fp.name} {self.lxd_container_name}:{abs_remote_dir}/ {abs_local_dir}/{' --delete' if delete else ''}"
 
 			LOGGER.opt(ansi=True).info(f"<green>{log_str}</green>")
 			
 			for response_line in subprocess.check_output(cmd.split(" ")).decode("utf-8").split("\n"):
+				response_line = response_line.replace("\r", "") # so things stay on one line
+				# print(response_line.encode("utf-8"))
 				if any(x in response_line for x in ["rsync error", "failed"]):
 					success = False
 					LOGGER.error(f"rsync failed: {response_line}")
