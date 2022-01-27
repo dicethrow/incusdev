@@ -1,5 +1,5 @@
 """Client to handle connections and actions executed against a remote host."""
-import subprocess, sys, os, glob, traceback, time, tempfile, textwrap
+import subprocess, sys, os, glob, traceback, time, tempfile, textwrap, shutil
 from typing import List
 
 from paramiko import RSAKey, SSHClient, SSHConfig, ProxyCommand, RejectPolicy
@@ -39,14 +39,19 @@ class RemoteClient:
 		self,
 		host: str,
 		lxd_container_name: str,
-		user: str,
+		local_working_directory: str,
+		user = "ubuntu",
 		ssh_config_filepath="~/.ssh/config",
 	):
 		self.host = host
 		self.lxd_container_name = lxd_container_name
+		self.local_working_directory = local_working_directory
+		self.remote_working_directory = self.local_working_directory.replace("/home/", "~/from_host/")
 		self.user = user
 		self.ssh_config_filepath = ssh_config_filepath
 		self.client = None
+		
+		assert "home" in self.local_working_directory, "content must be in the host user's home folder"
 
 	def __enter__(self):
 		"""Open SSH connection to remote host."""
@@ -55,7 +60,7 @@ class RemoteClient:
 
 
 			# 10, 11 dec 2021
-			# form https://gist.github.com/acdha/6064215
+			# from https://gist.github.com/acdha/6064215
 			cfg = {'hostname': self.host, 'username': self.user}
 
 			self.client = SSHClient()
@@ -146,7 +151,7 @@ class RemoteClient:
 			LOGGER.error(f"Unexpected error occurred: {e}")
 			raise e
 
-	def execute_commands(self, commands, ignore_failures = False):
+	def execute_commands(self, commands, ignore_failures = False, get_stderr = False):
 		"""
 		Execute multiple commands in succession.
 
@@ -203,11 +208,121 @@ class RemoteClient:
 			# raise myRemoteException(error_lines)
 			pass
 
-		return result_lines
+		if get_stderr:
+			return result_lines, error_lines, 
+		else:
+			return result_lines
 	
-	def clean(self):
+	def clean(self): # obsolete
 		folders_to_delete =  ["Outputs", "Uploads"]
 		for folder in folders_to_delete:
 			if len(self.execute_commands(f"ls ~/Documents/{folder}/")) > 0:
 				self.execute_commands(f"rm -r ~/Documents/{folder}/*")
 
+
+	### new
+
+	def empty_folders(self, folders_to_delete, local_or_remote):
+		assert local_or_remote in ["local", "remote", "local_and_remote"]
+	
+		"from here https://www.geeksforgeeks.org/delete-an-entire-directory-tree-using-python-shutil-rmtree-method/"
+		for folder in folders_to_delete:
+			if local_or_remote in ["local", "local_and_remote"]:
+				path = os.path.join(self.local_working_directory, folder)
+				if os.path.isdir(path):
+					shutil.rmtree(path)
+				os.mkdir(path) # so the folder exists and is empty
+
+			if local_or_remote in ["remote", "local_and_remote"]:
+				path = os.path.join(self.remote_working_directory, folder)
+				if len(self.execute_commands(f"ls {path}")) > 0:
+					self.execute_commands(f"rm -r {path}/*")
+
+
+	def rsync_abs(self, delete = False, direction = "local_to_remote", abs_local_dir = "content", abs_remote_dir = "invalid_dir"):
+		# 26jan2022
+		# changed to use abs paths
+		# next: phase out the old rsync and replace it with this
+
+		# 10dec2021 from https://discuss.linuxcontainers.org/t/rsync-files-into-container-from-host/822
+		# rsync docs https://linux.die.net/man/1/rsync
+		# -avPz means --archive --verbose --partial --progress --compress"
+		# the extra --delete is so deleted files are removed
+
+		# 6jan2022
+		# tempfile technique from here https://stackoverflow.com/questions/28410137/python-create-temp-file-namedtemporaryfile-and-call-subprocess-on-it
+		fake_ssh_fp = tempfile.NamedTemporaryFile(delete=True)
+		with open(fake_ssh_fp.name, "w") as f:
+			f.write(textwrap.dedent("""
+				#!/bin/sh
+				ctn="${1}"
+				shift
+				exec lxc exec "${ctn}" -- "$@"
+			""".lstrip("\n")))
+		os.chmod(fake_ssh_fp.name, 0x0777)
+		fake_ssh_fp.file.close()
+
+		success = True
+		try:
+			# assuming this will always be used with lxd with an ubuntu user,
+			abs_remote_dir = abs_remote_dir.replace("~", "/home/ubuntu")
+
+			if direction == "local_to_remote":
+				self.execute_commands(f"mkdir -p {abs_remote_dir}") # make remote directory tree if it doesn't exist
+				# self.execute_commands(f"mkdir -p /home/ubuntu/Documents/Outputs") # make remote directory tree if it doesn't exist
+
+				log_str = f"Used rsync from local {abs_local_dir} to {self.host}:{abs_remote_dir}"
+				cmd = f"rsync -avPz {abs_local_dir}/ -e {fake_ssh_fp.name} {self.lxd_container_name}:{abs_remote_dir}/{' --delete' if delete else ''}"
+
+			elif direction == "remote_to_local":
+				log_str = f"Used rsync from {self.host}:{abs_remote_dir} to local {abs_local_dir}"
+				cmd = f"rsync -avPz -e {fake_ssh_fp.name} {self.lxd_container_name}:{abs_remote_dir}/ {abs_local_dir}/{' --delete' if delete else ''}"
+
+			LOGGER.opt(ansi=True).info(f"<green>{log_str}</green>")
+			
+			for response_line in subprocess.check_output(cmd.split(" ")).decode("utf-8").split("\n"):
+				if any(x in response_line for x in ["rsync error", "failed"]):
+					success = False
+					LOGGER.error(f"rsync failed: {response_line}")
+				else:
+					LOGGER.opt(ansi=True).info(f"<light-blue>{response_line}</light-blue>")
+
+			assert success, "Aborting after rsync failure"
+				
+		except FileNotFoundError as error:
+			LOGGER.error(error)
+			raise e
+		except Exception as e:
+			LOGGER.error(f"Unexpected error occurred: {e}")
+			raise e
+
+	def rsync_to_container(self):
+		""" 
+		An alternative to using a shared folder approach.
+		For a self.local_working_directory of 
+			~/Documents/git_repos/a/b/c
+		rsync the given directory to the container in the dir
+			~/from_host/<host-username>/Documents/git_repos/a/b/c
+		"""
+
+		self.rsync_abs(
+			delete = False,
+			direction = "local_to_remote",
+			abs_local_dir=self.local_working_directory,
+			abs_remote_dir=self.remote_working_directory
+		)
+
+	def rsync_from_container(self):
+		""" 
+		The opposite of 'rsync_to_container'
+		"""
+		self.rsync_abs(
+			delete = False,
+			direction = "remote_to_local",
+			abs_local_dir=self.local_working_directory,
+			abs_remote_dir=self.remote_working_directory
+		)
+		
+
+
+		
