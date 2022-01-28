@@ -16,9 +16,13 @@ def main():
 	elif args.task == "rsync_to_container":
 		assert "home" in os.getcwd(), "this function is defined for folders within a host users home directory only"
 		
+		lxd_container_name = args.arg2.replace("lxd_", "") # e.g. lxd_doc-dev -> doc-dev
+		result, error = lxdev.run_local_cmd(f"lxc info {lxd_container_name}")
+		assert "Error: Not Found" not in result+error, f"Invalid lxd container name inferred of: {lxd_container_name}"
+
 		with  lxdev.RemoteClient(
 			host = args.arg2, # e.g. lxd_doc-dev
-			lxd_container_name = args.arg2.replace("lxd_", ""), # e.g. lxd_doc-dev -> doc-dev
+			lxd_container_name = lxd_container_name,
 			local_working_directory = os.getcwd() # the directory where this is called from
 			) as ssh_remote_client:
 
