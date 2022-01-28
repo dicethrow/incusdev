@@ -151,7 +151,40 @@ class RemoteClient:
 			LOGGER.error(f"Unexpected error occurred: {e}")
 			raise e
 
-	def execute_commands(self, commands, ignore_failures = False, get_stderr = False):
+	
+	def interactive_shell(self, commands, within_remote_working_dir=False):
+		
+		assert type(commands) == list, "only a list of commands makes sense here"
+
+		if within_remote_working_dir:
+			# execute in remote working dir?
+			commands = [f"cd {self.remote_working_directory} && "] + commands
+
+		channel = self.client.invoke_shell()
+		stdin = channel.makefile('wb')
+		stdout = channel.makefile('r')
+
+		while True:
+			result = ""
+			time.sleep(0.2)
+
+			while channel.recv_ready():
+				result += channel.recv(999).decode("utf-8")
+				time.sleep(0.2)
+			print(result, end="")
+
+			if channel.send_ready():
+
+				if len(commands) > 0:
+					next_cmd = commands[0]
+					commands = commands[1:]
+				else:
+					next_cmd = input("")
+					
+				channel.sendall(str(next_cmd + "\r\n").encode("utf-8"))
+
+	
+	def execute_commands(self, commands, ignore_failures = False, get_stderr = False, within_remote_working_dir=False, pass_to_stdin=None):
 		"""
 		Execute multiple commands in succession.
 
@@ -168,19 +201,71 @@ class RemoteClient:
 					combined_cmd = cmd 
 				else:
 					combined_cmd += " && " + cmd
+		
+		if within_remote_working_dir:
+			# execute in remote working dir?
+			combined_cmd = f"cd {self.remote_working_directory} && " + combined_cmd
 
 		# print(combined_cmd)
 
 		LOGGER.opt(ansi=True).info(f"<green>{self.user}@{self.host} $ {combined_cmd}</green>")
 
-		stdin, stdout, stderr = self.client.exec_command(combined_cmd)
-		stderr.channel.recv_exit_status()
 
+		if "repl" == pass_to_stdin:
+			channel = self.client.invoke_shell()
+			stdin = channel.makefile('wb')
+			stdout = channel.makefile('r')
+
+
+			print("AA")
+			while True:
+				result = ""
+				time.sleep(0.2)
+
+				while channel.recv_ready():
+					result += channel.recv(999).decode("utf-8")
+					time.sleep(0.2)
+				print(result, end="")
+
+				if channel.send_ready():
+					channel.sendall(str(input("") + "\r\n").encode("utf-8"))
+	
+			prin("BB")
+
+			pass_to_stdin = None
+
+		else:
+			stdin, stdout, stderr = self.client.exec_command(combined_cmd)
+
+		if pass_to_stdin != None:
+			stdin.channel.send(pass_to_stdin)
+			stdin.channel.shutdown_write()			
+
+		result_lines = []
+		# stdout.channel.recv_exit_status()  # not used? 28jan2022
+		try:
+			while True: # prints as each line is ready, form https://stackoverflow.com/questions/55642555/real-time-output-for-paramiko-exec-command
+				line = stdout.readline()
+				if not line:
+					break			
+				line = line.strip("\n")
+				LOGGER.trace(f"INPUT: {combined_cmd}")
+				LOGGER.info(f"{line}")
+				result_lines.append(line)
+		except Exception as e:
+			print(e)
+			LOGGER.error(f"INPUT: {combined_cmd}")
+			LOGGER.error("Failed to read from stdout.readlines() , probably due to non-utf8 encoding")
+
+		# stderr.channel.recv_exit_status() # not used? 28jan2022
 		success = True
 		error_lines = []
-		for error_line in stderr.readlines():
+		while True: # prints as each line is ready, form https://stackoverflow.com/questions/55642555/real-time-output-for-paramiko-exec-command
+			error_line = stderr.readline()
+			if not error_line:
+				break
 			error_line = error_line.strip("\n")
-			if ("WARNING" in error_line) or ("Latexmk: Run number" in error_line):
+			if ("WARNING" in error_line):
 				pass # don't fail on warnings?
 				LOGGER.info(f"{error_line}")
 			else:
@@ -191,18 +276,6 @@ class RemoteClient:
 				except:
 					LOGGER.error(f"{error_line}")
 			error_lines.append(error_line)
-
-		result_lines = []
-		stdout.channel.recv_exit_status()
-		try:
-			for line in stdout.readlines():
-				line = line.strip("\n")
-				LOGGER.trace(f"INPUT: {combined_cmd}")
-				LOGGER.info(f"{line}")
-				result_lines.append(line)
-		except:
-			LOGGER.error(f"INPUT: {combined_cmd}")
-			LOGGER.error("Failed to read from stdout.readlines() , probably due to non-utf8 encoding")
 
 		if (not ignore_failures) and (not success):
 			# raise myRemoteException(error_lines)
@@ -278,7 +351,7 @@ class RemoteClient:
 				log_str = f"Used rsync from {self.host}:{abs_remote_dir} to local {abs_local_dir}"
 				cmd = f"rsync -avz -e {fake_ssh_fp.name} {self.lxd_container_name}:{abs_remote_dir}/ {abs_local_dir}/{' --delete' if delete else ''}"
 
-			LOGGER.opt(ansi=True).info(f"<green>{log_str}</green>")
+			# LOGGER.opt(ansi=True).info(f"<green>{log_str}</green>")
 			
 			for response_line in subprocess.check_output(cmd.split(" ")).decode("utf-8").split("\n"):
 				response_line = response_line.replace("\r", "") # so things stay on one line
@@ -294,9 +367,13 @@ class RemoteClient:
 		except FileNotFoundError as error:
 			LOGGER.error(error)
 			raise e
+
 		except Exception as e:
 			LOGGER.error(f"Unexpected error occurred: {e}")
 			raise e
+		
+		finally:
+			LOGGER.opt(ansi=True).info(f"<green>{log_str}</green>")
 
 	def rsync_to_container(self):
 		""" 
