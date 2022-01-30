@@ -3,8 +3,8 @@ import lxdev
 
 def main():
 	parser = argparse.ArgumentParser()
-	parser.add_argument("task", type=str, help="action to do")
-	parser.add_argument("arg2", type=str, help="multi-purpose second argument")
+	parser.add_argument("task", type=str, help="action to do, out of: check_dirs, rsync_to_container")
+	parser.add_argument("arg2", type=str, help="multi-purpose second argument, out of: lxd_doc-dev (or any other hostname of lxd container)")
 	args = parser.parse_args()
 
 	if args.task == "check_dirs":

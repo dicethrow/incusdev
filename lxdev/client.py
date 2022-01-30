@@ -1,5 +1,6 @@
 """Client to handle connections and actions executed against a remote host."""
 import subprocess, sys, os, glob, traceback, time, tempfile, textwrap, shutil
+import threading, queue
 from typing import List
 
 from paramiko import RSAKey, SSHClient, SSHConfig, ProxyCommand, RejectPolicy
@@ -46,12 +47,12 @@ class RemoteClient:
 		self.host = host
 		self.lxd_container_name = lxd_container_name
 		self.local_working_directory = local_working_directory
-		self.remote_working_directory = self.local_working_directory.replace("/home/", "~/from_host/")
+		self.remote_working_directory = self.get_remote_filename_from_local(self.local_working_directory)
 		self.user = user
 		self.ssh_config_filepath = ssh_config_filepath
 		self.client = None
 		
-		assert "home" in self.local_working_directory, "content must be in the host user's home folder"
+		
 
 	def __enter__(self):
 		"""Open SSH connection to remote host."""
@@ -100,7 +101,16 @@ class RemoteClient:
 		self.client.close()
 
 	
+	def get_remote_filename_from_local(self, local_filename, get_as_relative = False):
+		assert "home" in local_filename, "content must be in the host user's home folder"
+		remote_filename = local_filename.replace("/home/", "/home/ubuntu/from_host/") # don't use ~ here as it makes it harder to match path strings
 
+		if get_as_relative:
+			remote_filename = os.path.relpath(remote_filename, self.remote_working_directory)
+			# remote_filename = "./" + remote_filename
+			
+		return remote_filename
+	
 	def rsync(self, delete = False, direction = "local_to_remote", rel_local_dir = "content", rel_remote_dir = "invalid_dir"):
 		# 10dec2021 from https://discuss.linuxcontainers.org/t/rsync-files-into-container-from-host/822
 		# rsync docs https://linux.die.net/man/1/rsync
@@ -164,27 +174,49 @@ class RemoteClient:
 		stdin = channel.makefile('wb')
 		stdout = channel.makefile('r')
 
+		# the queue appraoch is from here https://stackoverflow.com/questions/2408560/non-blocking-console-input
+		input_queue = queue.Queue()
+
+		def add_input(input_queue):
+			while True:
+				input_queue.put(sys.stdin.read(1))
+
+		input_thread = threading.Thread(target=add_input, args=(input_queue,))
+		input_thread.daemon = True
+		input_thread.start()
+
+		next_cmd_partial = ""
+
 		while True:
 			result = ""
-			time.sleep(0.2)
+			# time.sleep(0.2) # needed?
 
 			while channel.recv_ready():
 				result += channel.recv(999).decode("utf-8")
-				time.sleep(0.2)
+				time.sleep(0.1)
 			print(result, end="")
 
 			if channel.send_ready():
-
 				if len(commands) > 0:
-					next_cmd = commands[0]
+					next_cmd = commands[0] + "\n"
 					commands = commands[1:]
+				elif not input_queue.empty():
+					next_cmd_partial += input_queue.get()
+					if "\n" in next_cmd_partial:
+						next_cmd = next_cmd_partial
+						next_cmd_partial = ""
+					else:
+						next_cmd = "incomplete"
 				else:
-					next_cmd = input("")
+					next_cmd = "incomplete"
 					
-				channel.sendall(str(next_cmd + "\r\n").encode("utf-8"))
-
+				if next_cmd != "incomplete":
+					# print("next cmd: ", next_cmd.encode("utf-8"))
+					channel.sendall(str(next_cmd).encode("utf-8"))		
+		
+		# input_thread.stop() # needed?
 	
-	def execute_commands(self, commands, ignore_failures = False, get_stderr = False, within_remote_working_dir=False, pass_to_stdin=None):
+	def execute_commands(self, commands, ignore_failures = False, get_stderr = False, within_remote_working_dir=False, pass_to_stdin=None, **kwargs):
 		"""
 		Execute multiple commands in succession.
 
@@ -210,7 +242,7 @@ class RemoteClient:
 
 		LOGGER.opt(ansi=True).info(f"<green>{self.user}@{self.host} $ {combined_cmd}</green>")
 
-		stdin, stdout, stderr = self.client.exec_command(combined_cmd)
+		stdin, stdout, stderr = self.client.exec_command(combined_cmd, **kwargs)
 
 		if pass_to_stdin != None:
 			stdin.channel.send(pass_to_stdin)
@@ -350,28 +382,36 @@ class RemoteClient:
 		finally:
 			LOGGER.opt(ansi=True).info(f"<green>{log_str}</green>")
 
-	def rsync_to_container(self):
+	def rsync_to_container(self, delete=True):
 		""" 
 		An alternative to using a shared folder approach.
 		For a self.local_working_directory of 
 			~/Documents/git_repos/a/b/c
 		rsync the given directory to the container in the dir
 			~/from_host/<host-username>/Documents/git_repos/a/b/c
+
+		Delete defeults to true, so the remote container always closely
+		mirrors the local working directory.
 		"""
 
 		self.rsync_abs(
-			delete = False,
+			delete = delete,
 			direction = "local_to_remote",
 			abs_local_dir=self.local_working_directory,
 			abs_remote_dir=self.remote_working_directory
 		)
 
-	def rsync_from_container(self):
+		# todo - print the difference between remote and local dirs?
+
+	def rsync_from_container(self, delete=True):
 		""" 
 		The opposite of 'rsync_to_container'
+
+		Delete defeults to true, so the local working directory always
+		shows an accurate representation of the remote working directory.
 		"""
 		self.rsync_abs(
-			delete = False,
+			delete = delete,
 			direction = "remote_to_local",
 			abs_local_dir=self.local_working_directory,
 			abs_remote_dir=self.remote_working_directory
