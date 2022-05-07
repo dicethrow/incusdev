@@ -216,13 +216,41 @@ class RemoteClient:
 		
 		# input_thread.stop() # needed?
 	
-	def execute_commands(self, commands, ignore_failures = False, get_stderr = False, within_remote_working_dir=False, pass_to_stdin=None, **kwargs):
+	def execute_commands(self, commands, ignore_failures = False, get_stderr = False, within_remote_working_dir=False, pass_to_stdin=None, add_local_traceback_file_references=True, **kwargs):
 		"""
 		Execute multiple commands in succession.
 
 		:param commands: List of unix commands as strings.
 		:type commands: List[str]
 		"""
+
+		def print_local_traceback_file_references(src_array):
+			""" 
+			This prints out an extra line containing a path to the referenced file on the host machine,
+			so in vscode you can just click it and be taken to the referred file.
+			This does make assumptions about where the file is (in /home/ubuntu/from_host/... in the container).
+			"""
+			# print(os.getcwd()) # /home/x/Documents/git_repos/gateware/amaram
+			# print(os.path.expanduser("~"))# /home/x
+			# 02-10-2022 14:52:14 | ERROR:   File "/home/ubuntu/from_host/x/Documents/git_repos/gateware/amaram/tests/ulx3s_gui_test/fpga_gateware/fpga_io_sim.py", line 28, in <module>
+
+			if src_array != type([]):
+				src_array = [src_array]
+
+			dst_array = []
+			common_project_dir = os.getcwd().replace(os.path.expanduser("~"), "") # so should be "/Documents/git_repos/gateware/amaram"
+			for each_line in src_array:
+				if common_project_dir in each_line:
+					dst_array.append(each_line)
+
+					line_with_local_reference = "." + each_line.split(common_project_dir)[-1]
+					dst_array.append(f"(Local file reference: {line_with_local_reference})")
+
+				else:
+					dst_array.append(each_line)
+
+			return dst_array
+
 
 		if type(commands) == str:
 			combined_cmd = commands
@@ -278,15 +306,25 @@ class RemoteClient:
 			else:
 				success = False
 				# LOGGER.error(f"{error_line}")
-				try:
-					LOGGER.opt(ansi=True).error(f"{error_line}") # for colours printed on stderr
-				except:
-					LOGGER.error(f"{error_line}")
+
+				def log_error_line(error_line):
+					try:
+						LOGGER.opt(ansi=True).error(f"{error_line}") # for colours printed on stderr
+					except:
+						LOGGER.error(f"{error_line}")
+
+				if add_local_traceback_file_references:
+					for err_line in print_local_traceback_file_references(error_line):
+						log_error_line(err_line)
+				else:
+					log_error_line(error_line)
+
 			error_lines.append(error_line)
 
 		if (not ignore_failures) and (not success):
 			# raise myRemoteException(error_lines)
 			pass
+
 
 		if get_stderr:
 			return result_lines, error_lines, 

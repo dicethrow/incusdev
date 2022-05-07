@@ -20,3 +20,4 @@ host $ pip3 install --editable <this-directory> #  so source code changes will b
 
 - add tests
 - can we interact with lxdev using command line options / entry points?
+- demonstrate/implement how to make this work with non-LXD machines, such as remote machines and virtual machines that work with an ssh interface
