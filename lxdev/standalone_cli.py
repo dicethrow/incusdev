@@ -43,6 +43,10 @@ def main():
 				ssh_remote_client.execute_commands([
 					f"mkdir -p {desired_remote_git_path}",
 					f"git -C {desired_remote_git_path} --bare init",
+
+					# now to disable compression, so things go faster, from https://stackoverflow.com/questions/45955460/disabling-delta-compression-in-git-for-a-single-remote
+					f"touch {desired_remote_git_path}/info/attributes",
+					f'echo "* -delta" >> {desired_remote_git_path}/info/attributes'
 				])
 				
 				result, error = lxdev.run_local_cmd(f"git remote add lxd_git-server {host}:{desired_remote_git_path}")
