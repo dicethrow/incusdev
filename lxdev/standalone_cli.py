@@ -276,7 +276,7 @@ def main():
 		
 		host = args.remote_hostname
 		lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(host)
-		local_working_dir = args.arg2
+		local_working_dir = os.path.abspath(args.arg2)
 		# print(local_working_dir)
 
 		with lxdev.RemoteClient(
@@ -287,7 +287,6 @@ def main():
 				remote_working_dir = ssh_remote_client.remote_working_directory
 
 		# print(remote_working_dir)
-
 
 		# as it currently works in a .sh file, just use that, for now
 		script_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "open_workspace_in_container.sh")

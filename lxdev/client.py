@@ -102,7 +102,7 @@ class RemoteClient:
 
 	
 	def get_remote_filename_from_local(self, local_filename, get_as_relative = False):
-		assert "home" in local_filename, "content must be in the host user's home folder"
+		assert "home" in local_filename, f"content must be in the host user's home folder, which is currently: {local_filename}"
 		remote_filename = local_filename.replace("/home/", "/home/ubuntu/from_host/") # don't use ~ here as it makes it harder to match path strings
 
 		if get_as_relative:

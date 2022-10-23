@@ -18,6 +18,7 @@ remote_working_dir=$3
 cd $local_working_dir
 
 if ssh $container -- test -f .flag_success; then
+	# remove the success flag
 	ssh $container -- rm .flag_success
 else
 	echo "Changes made last time have not been copied back out of the container"
@@ -26,25 +27,50 @@ else
 	# backup the current files on the host, in case they contain important changes that we don't want to lose
 	backup_name="backup_of_"$(pwd)".zip"
 	backup_name=${backup_name//\//\-} # replace forbidden slashes with dashes
-	echo "Backup saved to: "$backup_name
+	echo "Starting backup to: "$backup_name
 	zip -q -r /tmp/$backup_name .
+	echo "Backup done"
 
 	# overwrite the current files on the host with the changes in the container
 	(cd $(git rev-parse --show-toplevel); lxdev rsync_from_container $container delete)
+fi
+
+# determine and flag if codium is alreay running, 
+# as codium can't be started completely independently within a container
+if ssh $container -- pgrep codium > /dev/null; then
+	ssh $container -- touch .flag_codium_already_running
+	echo "Codium is already running"
+else
+	ssh $container -- rm .flag_codium_already_running > /dev/null # to silence it if it doesn't exist
+ 	echo "Codium is not already running"
 fi
 
 # copy over files
 (cd $(git rev-parse --show-toplevel); lxdev rsync_to_container $container delete)
 
 # open codium
-ssh $container -- codium "${remote_working_dir}/*.code-workspace" --disable-gpu #--no-xshm 1> /dev/null 2> /dev/null # assuming there's only one .code-workspace file
+ssh $container -- codium "${remote_working_dir}/*.code-workspace" --disable-gpu #--no-xshm #1> /dev/null 2> /dev/null # assuming there's only one .code-workspace file
 # --no-xshm is from https://github.com/microsoft/vscode/issues/101069, as I am getting that grey screen error the first attempt usually
 # this source says that a warning message is printed, but can be ignored https://github.com/microsoft/vscode/issues/111372
 
 ### gets to this point if codium was closed, often doesn't get to this point if the computer is shutdown ###
 
-# overwrite the current files on the host with the changes in the container
-(cd $(git rev-parse --show-toplevel); lxdev rsync_from_container $container delete)
-
 # set the flag. no effect if it already is set
-ssh $container -- touch .flag_success
+if ssh $container -- test -f .flag_codium_already_running; then
+	# remove the flag as we're no longer using it
+	# also don't flag this as success - this means changes will be copied over next
+	ssh $container -- rm .flag_codium_already_running
+	echo "Failure, will copy files next time."
+	echo "Recommend to briefly rerun ths script again when you close codium to copy the files over, "
+	echo "and then close all codium instances with: 'ssh "$container" -- pkill codium'"
+	read -p "Press enter to close" userinput
+
+else
+	# overwrite the current files on the host with the changes in the container
+	# if this script returns from codium() immediately, it won't contain changes, hence will be redundant
+	(cd $(git rev-parse --show-toplevel); lxdev rsync_from_container $container delete)
+
+	ssh $container -- touch .flag_success	
+	echo "Success"
+fi
+
