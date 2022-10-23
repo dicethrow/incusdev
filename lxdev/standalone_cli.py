@@ -10,14 +10,18 @@ defined_tasks = [
 
 	"init_lxd_git-server_on_host",
 	"init_lxd_git-server_access_in_container",
-	"refresh_repo_in_host_and_dev_container",
+	# "refresh_repo_in_host_and_dev_container", # using git for this purpose seems obfuscatory, too complex
+
+	"open_workspace_in"
 ]
 
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("task", type=str, help=f"action to do, out of: {''.join(s + ', ' for s in defined_tasks)}")
 	parser.add_argument("remote_hostname", type=str, nargs='?', help="remote_hostname", default="none")
-	parser.add_argument("if_delete", type=str, nargs='?', help="'delete' or 'keep'? how to handle overwriting files at destination.", default="keep")
+	parser.add_argument("arg2", type=str, nargs='?', help="'delete' or 'keep'? how to handle overwriting files at destination.", default="keep")
+	# parser.add_argument("script_dir", type=str, nargs='?', default="none")
+
 
 	args = parser.parse_args()
 
@@ -158,74 +162,74 @@ def main():
 		"""
 
 
-	elif args.task == "refresh_repo_in_host_and_dev_container":
-		# from https://stackoverflow.com/questions/171550/find-out-which-remote-branch-a-local-branch-is-tracking
-		get_upstream_branch_name_cmd_part1 = "git symbolic-ref -q HEAD"
-		get_upstream_branch_name_cmd = f"git for-each-ref --format='%(upstream:short)' \"$({get_upstream_branch_name_cmd_part1})\""
+	# elif args.task == "refresh_repo_in_host_and_dev_container":
+	# 	# from https://stackoverflow.com/questions/171550/find-out-which-remote-branch-a-local-branch-is-tracking
+	# 	get_upstream_branch_name_cmd_part1 = "git symbolic-ref -q HEAD"
+	# 	get_upstream_branch_name_cmd = f"git for-each-ref --format='%(upstream:short)' \"$({get_upstream_branch_name_cmd_part1})\""
 
 		
-		# If this fails, make sure to call 'init_lxd_git-server_on_host' and 'init_lxd_git-server_access_in_container' first
-		host = args.remote_hostname
-		assert host != "none", "The container for development needs to be specified"
-		lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(host)
-		with lxdev.RemoteClient(
-			host = host,
-			lxd_container_name = lxd_container_name,
-			local_working_directory = os.getcwd() # the directory where this is called from
-			) as ssh_remote_client:
+	# 	# If this fails, make sure to call 'init_lxd_git-server_on_host' and 'init_lxd_git-server_access_in_container' first
+	# 	host = args.remote_hostname
+	# 	assert host != "none", "The container for development needs to be specified"
+	# 	lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(host)
+	# 	with lxdev.RemoteClient(
+	# 		host = host,
+	# 		lxd_container_name = lxd_container_name,
+	# 		local_working_directory = os.getcwd() # the directory where this is called from
+	# 		) as ssh_remote_client:
 
-				# get changes from host
-				symbolic_ref = lxdev.run_local_cmd(get_upstream_branch_name_cmd_part1)[0][0]
-				original_upstream_branch = lxdev.run_local_cmd(f"git for-each-ref --format='%(upstream:short)' {symbolic_ref}")[0][0]
+	# 			# get changes from host
+	# 			symbolic_ref = lxdev.run_local_cmd(get_upstream_branch_name_cmd_part1)[0][0]
+	# 			original_upstream_branch = lxdev.run_local_cmd(f"git for-each-ref --format='%(upstream:short)' {symbolic_ref}")[0][0]
 
-				# original_upstream_branch = lxdev.run_local_cmd(get_upstream_branch_name_cmd, print_result=True, print_error=True, print_cmd=True)[0][0]
-				print(original_upstream_branch)
-				original_remote, original_branch = original_upstream_branch.split("/")
-				git_server_branch = f"lxd_git-server/{original_branch}"
-				lxdev.run_local_cmd(f"git branch --set-upstream-to {git_server_branch}")
+	# 			# original_upstream_branch = lxdev.run_local_cmd(get_upstream_branch_name_cmd, print_result=True, print_error=True, print_cmd=True)[0][0]
+	# 			print(original_upstream_branch)
+	# 			original_remote, original_branch = original_upstream_branch.split("/")
+	# 			git_server_branch = f"lxd_git-server/{original_branch}"
+	# 			lxdev.run_local_cmd(f"git branch --set-upstream-to {git_server_branch}")
 
-				status = lxdev.run_local_cmd(f"git status")[0]
-				for line in status:
-					if "Changes not staged for commit" in line: # this means that the commit_changes_from_dev_container task didn't run last time
-						lxdev.run_local_cmd(f"git add -A")
-						lxdev.run_local_cmd(f"git commit -m '{input('Enter commit message for changes in container: ')}'")
+	# 			status = lxdev.run_local_cmd(f"git status")[0]
+	# 			for line in status:
+	# 				if "Changes not staged for commit" in line: # this means that the commit_changes_from_dev_container task didn't run last time
+	# 					lxdev.run_local_cmd(f"git add -A")
+	# 					lxdev.run_local_cmd(f"git commit -m '{input('Enter commit message for changes in container: ')}'")
 					
-					elif "Your branch is ahead" in line: # then there are unpushed changes
-						lxdev.run_local_cmd(f"git pull lxd_git-server")
-						lxdev.run_local_cmd("git push lxd_git-server")
+	# 				elif "Your branch is ahead" in line: # then there are unpushed changes
+	# 					lxdev.run_local_cmd(f"git pull lxd_git-server")
+	# 					lxdev.run_local_cmd("git push lxd_git-server")
 				
-				lxdev.run_local_cmd(f"git branch --set-upstream-to {original_upstream_branch}")
+	# 			lxdev.run_local_cmd(f"git branch --set-upstream-to {original_upstream_branch}")
 
-				####### and now in dev container,
+	# 			####### and now in dev container,
 
 
-				local_git_path, error = lxdev.run_local_cmd(f"git rev-parse --show-toplevel")
-				assert error==[], f"Error: {error}"
-				remote_git_path = ssh_remote_client.get_remote_filename_from_local(local_git_path[0])
+	# 			local_git_path, error = lxdev.run_local_cmd(f"git rev-parse --show-toplevel")
+	# 			assert error==[], f"Error: {error}"
+	# 			remote_git_path = ssh_remote_client.get_remote_filename_from_local(local_git_path[0])
 				
-				# let's temporarily set the lxd_git-server repo as upstream for now, assuming dev and host are the same				
-				ssh_remote_client.execute_commands(f"git branch --set-upstream-to {git_server_branch}")
+	# 			# let's temporarily set the lxd_git-server repo as upstream for now, assuming dev and host are the same				
+	# 			ssh_remote_client.execute_commands(f"git branch --set-upstream-to {git_server_branch}")
 
-				status = ssh_remote_client.execute_commands(f"git status")
-				for line in status:
-					if "Changes not staged for commit" in line: # this means that the commit_changes_from_dev_container task didn't run last time
-						ssh_remote_client.execute_commands([
-							f"git add -A",
-							f"git commit -m '{input('Enter commit message for changes in container: ')}'"
-						])
+	# 			status = ssh_remote_client.execute_commands(f"git status")
+	# 			for line in status:
+	# 				if "Changes not staged for commit" in line: # this means that the commit_changes_from_dev_container task didn't run last time
+	# 					ssh_remote_client.execute_commands([
+	# 						f"git add -A",
+	# 						f"git commit -m '{input('Enter commit message for changes in container: ')}'"
+	# 					])
 					
-					elif "Your branch is ahead" in line: # then there are unpushed changes
-						ssh_remote_client.execute_commands([
-							f"git pull lxd_git-server", # ass
-							f"git push lxd_git-server"
-						])
+	# 				elif "Your branch is ahead" in line: # then there are unpushed changes
+	# 					ssh_remote_client.execute_commands([
+	# 						f"git pull lxd_git-server", # ass
+	# 						f"git push lxd_git-server"
+	# 					])
 					
-					# elif 
+	# 				# elif 
 
-				# and undo it
-				ssh_remote_client.execute_commands(f"git branch --set-upstream-to {original_upstream_branch}")
+	# 			# and undo it
+	# 			ssh_remote_client.execute_commands(f"git branch --set-upstream-to {original_upstream_branch}")
 
-		# now get the changes on the host from lxd_git-server
+	# 	# now get the changes on the host from lxd_git-server
 
 
 
@@ -236,12 +240,12 @@ def main():
 		lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(args.remote_hostname)
 
 		if args.task in ["rsync_to_container", "rsync_from_container"]:
-			if args.if_delete == "delete":
+			if args.arg2 == "delete":
 				delete = True
-			elif args.if_delete == "keep":
+			elif args.arg2 == "keep":
 				delete = False
 			else:
-				assert 0, "Invalid if_delete argument passed, should be 'delete' or 'keep'"
+				assert 0, "Invalid arg2 argument passed, should be 'delete' or 'keep'"
 
 		with  lxdev.RemoteClient(
 			host = args.remote_hostname, # e.g. lxd_doc-dev
@@ -265,6 +269,32 @@ def main():
 
 				else:
 					assert 0	
+
+	elif args.task == "open_workspace_in":
+		# this is to replace having complexity in the `open_workspace_in_xxx.sh` files
+		assert "home" in os.getcwd(), "this function is defined for folders within a host users home directory only"
+		
+		host = args.remote_hostname
+		lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(host)
+		local_working_dir = args.arg2
+		# print(local_working_dir)
+
+		with lxdev.RemoteClient(
+			host = host, # e.g. lxd_doc-dev
+			lxd_container_name = lxd_container_name,
+			local_working_directory = local_working_dir
+			) as ssh_remote_client:
+				remote_working_dir = ssh_remote_client.remote_working_directory
+
+		# print(remote_working_dir)
+
+
+		# as it currently works in a .sh file, just use that, for now
+		script_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "open_workspace_in_container.sh")
+
+		lxdev.run_local_gui_cmd(f"{script_path} {host} {local_working_dir} {remote_working_dir}")
+
+		
 	else:
 		assert 0, "Invalid task given"
 
