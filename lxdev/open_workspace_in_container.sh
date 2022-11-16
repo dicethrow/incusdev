@@ -6,6 +6,7 @@
 container=$1
 local_working_dir=$2
 remote_working_dir=$3
+container_lxd_name=$4
 
 # 22oct22 added flag files to indicate whether the last run failed - ie to prevent overwriting data that wasn't copied back last time
 
@@ -47,6 +48,14 @@ fi
 
 # copy over files
 (cd $(git rev-parse --show-toplevel); lxdev rsync_to_container $container delete)
+
+# 16nov2022 (noticed this line was removed a few weeks ago, adding it back in)
+# note that the ownership of files is copied over as a code that may not align with the user in the container,
+# so lets set container user ownership of these files
+# lxdev.run_local_cmd(f"lxc shell {lxd_container_name} -- sh -c \"chown -R ubuntu:ubuntu {remote_working_dir}\"", print_cmd=True, print_result=True)		
+# huh! why does the command work below, but not when run as the line above, in python?
+lxc shell $container_lxd_name -- sh -c "chown -R ubuntu:ubuntu $remote_working_dir"
+
 
 # open codium
 ssh $container -- codium "${remote_working_dir}/*.code-workspace" --disable-gpu #--no-xshm #1> /dev/null 2> /dev/null # assuming there's only one .code-workspace file
