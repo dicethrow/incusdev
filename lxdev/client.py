@@ -218,7 +218,7 @@ class RemoteClient:
 	
 	def execute_commands(self, commands, ignore_failures = False, get_stderr = False, within_remote_working_dir=False, pass_to_stdin=None, add_local_traceback_file_references=True, **kwargs):
 		"""
-		Execute multiple commands in succession.
+		Execute multiple commands in succession, in the container.
 
 		:param commands: List of unix commands as strings.
 		:type commands: List[str]

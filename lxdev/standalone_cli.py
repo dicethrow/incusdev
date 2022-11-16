@@ -256,6 +256,11 @@ def main():
 				# print("Connected!")
 				if args.task == "rsync_to_container":
 					ssh_remote_client.rsync_to_container(delete=delete)
+
+					# 16nov2022 - this was done elsewhere but here is a good location to do it.
+					# note that the ownership of files is copied over as a code that may not align with the user in the container,
+					# so lets set container user ownership of these files
+					lxdev.run_local_cmd(f"lxc exec {ssh_remote_client.lxd_container_name} -- sh -c \"chown -R ubuntu:ubuntu {ssh_remote_client.remote_working_directory}\"")
 					
 				elif args.task == "rsync_from_container":
 					ssh_remote_client.rsync_from_container(delete=delete)
@@ -264,8 +269,6 @@ def main():
 					print(ssh_remote_client.remote_working_directory, end="") 
 					# this 'print' is used to save the result as a variable in some bash scripts, 
 					# e.g. remote_dir=$(lxdev get_remote_working_directory lxd_doc-dev keep)
-
-				
 
 				else:
 					assert 0	
