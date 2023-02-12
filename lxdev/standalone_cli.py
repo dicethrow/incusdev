@@ -1,6 +1,9 @@
 import os, argparse
+import json
 import lxdev
 import textwrap
+
+STATUS_FILENAME = os.path.join(os.path.dirname(os.path.realpath(__file__)),".status.json")
 
 defined_tasks = [
 	"check_dirs",
@@ -11,9 +14,50 @@ defined_tasks = [
 	"init_lxd_git-server_on_host",
 	"init_lxd_git-server_access_in_container",
 	# "refresh_repo_in_host_and_dev_container", # using git for this purpose seems obfuscatory, too complex
+	"open_workspace_in_next_free_container_from",
 
 	"open_workspace_in"
 ]
+
+def setStatusVariable(key, value):
+	# value must be serialisable, according to json, 
+	# so preferably always use strings
+	with open(STATUS_FILENAME, "r") as f:
+		data = json.load(f)
+	data[key] = value
+	with open(STATUS_FILENAME, "w") as f:
+		json.dump(data, f)
+
+def clearStatusVariable(key):
+	with open(STATUS_FILENAME, "r") as f:
+		data = json.load(f)
+	if key in data:
+		del data[key]
+	with open(STATUS_FILENAME, "w") as f:
+		json.dump(data, f)
+
+def getStatusVariable(key):
+	with open(STATUS_FILENAME, "r") as f:
+		data = json.load(f)
+	return data.get(key, None)
+
+def setContainerStatus(hostname, status):
+	key=f"LXDEV_CNTR_STATUS_{hostname}"
+	if status == None:
+		clearStatusVariable(key)
+	else:
+		assert type(status) == type(""), "status needs to be a serialisable type, pref. string"
+		setStatusVariable(key, value=status)
+
+def getContainerStatus(hostname):
+	return getStatusVariable(key=f"LXDEV_CNTR_STATUS_{hostname}")
+
+def assert_we_can_extract_lxd_name_from_hostname(hostname):
+	lxd_container_name = hostname.replace("lxd_", "") # e.g. lxd_doc-dev -> doc-dev
+	result, error = lxdev.run_local_cmd(f"lxc info {lxd_container_name}")
+	assert "Error: Not Found" not in result+error, f"Invalid lxd container name inferred of: {lxd_container_name}"
+	return lxd_container_name
+
 
 def main():
 	parser = argparse.ArgumentParser()
@@ -27,17 +71,31 @@ def main():
 
 	assert args.task in defined_tasks
 
+	# at this point check that the STATUS_FILENAME exists; make it if not
+	try:
+		with open(STATUS_FILENAME, "r") as f:
+			data = json.load(f)
+	except Exception as e:
+		print(e)
+		print(".....")
+		with open(STATUS_FILENAME,"w") as f:
+			json.dump({}, f)
+
 	if args.task == "check_dirs":
 		print("Hello this is the standalone cli file")
 		print(f"This .py's path is: {os.path.dirname(os.path.realpath(__file__))}")
 		print(f"User dir is: {os.path.expanduser('~')}")
 		print(f"Script called from {os.getcwd()}")
+	
 
 	elif args.task == "init_lxd_git-server_on_host": 
 		assert "home" in os.getcwd(), "this function is defined for folders within a host users home directory only"
 
-		host = "lxd_git-server" if args.remote_hostname == "none" else args.remote_hostname
+		host = "lxd_git-server" if args.remote_hostname == "none" else args.remote_hostname # todo: this looks badly structured
 		lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(host)
+
+		setContainerStatus(host, "busy")
+
 		with  lxdev.RemoteClient(
 			host = host, # e.g. lxd_doc-dev
 			lxd_container_name = lxd_container_name,
@@ -59,6 +117,8 @@ def main():
 				
 				result, error = lxdev.run_local_cmd(f"git remote add lxd_git-server {host}:{desired_remote_git_path}")
 				assert error==[], f"Error: {error}"
+		
+		setContainerStatus(host, None)
 	
 	elif args.task == "init_lxd_git-server_access_in_container":
 		# result, error = lxdev.run_local_cmd(f"git remote -v | grep lxd_git-server")
@@ -67,6 +127,8 @@ def main():
 		
 		host = args.remote_hostname
 		assert host != "none", "The container that wants to access lxd_git-server needs to be specified"
+
+		setContainerStatus(host, "busy")
 
 		# Get the public ssh key of the development container
 		# Make it it it doesn't exist 
@@ -94,11 +156,11 @@ def main():
 				if not found:
 					name_resolution_lines = textwrap.dedent(""" 
 					Host lxd_git-server
-					    HostName 10.40.119.159
-					    User ubuntu
-					    IdentityFile ~/.ssh/id_rsa
-					    ForwardAgent Yes
-					    ForwardX11 Yes
+						HostName 10.40.119.159
+						User ubuntu
+						IdentityFile ~/.ssh/id_rsa
+						ForwardAgent Yes
+						ForwardX11 Yes
 
 					""")
 					for line in name_resolution_lines.split("\n"):
@@ -160,6 +222,8 @@ def main():
 		Warning: Permanently added '10.40.119.159' (ECDSA) to the list of known hosts.
 		To lxd_git-server:/home/ubuntu/from_host/x/Documents/git_repos/documentation/projects/prototyping_workflows.git
 		"""
+
+		setContainerStatus(host, None)
 
 
 	# elif args.task == "refresh_repo_in_host_and_dev_container":
@@ -247,6 +311,8 @@ def main():
 			else:
 				assert 0, "Invalid arg2 argument passed, should be 'delete' or 'keep'"
 
+		setContainerStatus(args.remote_hostname, "busy")
+
 		with  lxdev.RemoteClient(
 			host = args.remote_hostname, # e.g. lxd_doc-dev
 			lxd_container_name = lxd_container_name,
@@ -267,6 +333,8 @@ def main():
 
 				else:
 					assert 0	
+		
+		setContainerStatus(args.remote_hostname, None)
 
 	elif args.task == "open_workspace_in":
 		# this is to replace having complexity in the `open_workspace_in_xxx.sh` files
@@ -276,6 +344,8 @@ def main():
 		lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(host)
 		local_working_dir = os.path.abspath(args.arg2)
 		# print(local_working_dir)
+
+		setContainerStatus(host, "busy")
 
 		with lxdev.RemoteClient(
 			host = host, # e.g. lxd_doc-dev
@@ -291,13 +361,58 @@ def main():
 
 		lxdev.run_local_gui_cmd(f"{script_path} {host} {local_working_dir} {remote_working_dir} {lxd_container_name}")
 
+		setContainerStatus(host, None)
+
+	elif args.task == "open_workspace_in_next_free_container_from":
+		# this is so several identically-set-up containers can be available,
+		# and we can make sure that only one is in use at a time
+		# by using environment variables on the host pc.
+		# At this point, pass in the set of hostnames to try in a comma-separated-list with no spaces,
+		# like 		doc-dev,doc-dev2
+		# note, rather than returning values, this sets environment variables
+		# and use the save-to-status-json thing to other processes know about it
+		
+		possible_hostnames = args.remote_hostname.split(",")
+
+		print("Looking for available containers:")
+		containerFound = False
+		for possible_host in possible_hostnames:
+			status = getContainerStatus(possible_host)
+			if status == None:
+				print(f"container {possible_host} is available, proceeding.")
+				containerFound = True
+				break
+			print(f"container {possible_host} is {status}...")
+		if not containerFound:
+			return
+		
+		# now do the other thing - todo: make this a function call ###############
+		# this is to replace having complexity in the `open_workspace_in_xxx.sh` files
+		assert "home" in os.getcwd(), "this function is defined for folders within a host users home directory only"
+		
+		host = possible_host
+		lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(host)
+		local_working_dir = os.path.abspath(args.arg2)
+
+		setContainerStatus(host, "busy")
+
+		with lxdev.RemoteClient(
+			host = host, # e.g. lxd_doc-dev
+			lxd_container_name = lxd_container_name,
+			local_working_directory = local_working_dir
+			) as ssh_remote_client:
+				remote_working_dir = ssh_remote_client.remote_working_directory
+
+		# print(remote_working_dir)
+
+		# as it currently works in a .sh file, just use that, for now
+		script_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "open_workspace_in_container.sh")
+
+		lxdev.run_local_gui_cmd(f"{script_path} {host} {local_working_dir} {remote_working_dir} {lxd_container_name}")
+
+		setContainerStatus(host, None)
 		
 	else:
 		assert 0, "Invalid task given"
 
 
-def assert_we_can_extract_lxd_name_from_hostname(hostname):
-	lxd_container_name = hostname.replace("lxd_", "") # e.g. lxd_doc-dev -> doc-dev
-	result, error = lxdev.run_local_cmd(f"lxc info {lxd_container_name}")
-	assert "Error: Not Found" not in result+error, f"Invalid lxd container name inferred of: {lxd_container_name}"
-	return lxd_container_name
