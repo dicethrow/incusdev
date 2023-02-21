@@ -38,11 +38,11 @@ fi
 
 # determine and flag if codium is alreay running, 
 # as codium can't be started completely independently within a container
-if ssh $container -- pgrep codium > /dev/null; then
+if ssh $container -- pgrep codium > /dev/null 2>&1; then
 	ssh $container -- touch .flag_codium_already_running
 	echo "Codium is already running"
 else
-	ssh $container -- rm .flag_codium_already_running > /dev/null # to silence it if it doesn't exist
+	ssh $container -- rm .flag_codium_already_running > /dev/null 2>&1 # to silence it if it doesn't exist
  	echo "Codium is not already running"
 fi
 
