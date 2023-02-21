@@ -12,14 +12,17 @@ defined_tasks = [
 	"init_lxd_git-server_access_in_container",
 	# "refresh_repo_in_host_and_dev_container", # using git for this purpose seems obfuscatory, too complex
 
-	"open_workspace_in"
+	"open_workspace_in",
+	"run_program_in"
 ]
 
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("task", type=str, help=f"action to do, out of: {''.join(s + ', ' for s in defined_tasks)}")
 	parser.add_argument("remote_hostname", type=str, nargs='?', help="remote_hostname", default="none")
-	parser.add_argument("arg2", type=str, nargs='?', help="'delete' or 'keep'? how to handle overwriting files at destination.", default="keep")
+	parser.add_argument("arg2", type=str, nargs='?', help="'delete' or 'keep'? how to handle overwriting files at destination.", default="")
+	parser.add_argument("arg3", type=str, nargs='?', help="arg3", default="")
+	parser.add_argument("arg4", type=str, nargs='?', help="arg4", default="")
 	# parser.add_argument("script_dir", type=str, nargs='?', default="none")
 
 	args = parser.parse_args()
@@ -43,6 +46,9 @@ def main():
 
 	elif args.task == "open_workspace_in":
 		open_workspace_in(args)
+	
+	elif args.task == "run_program_in":
+		run_program_in(args)
 		
 	else:
 		assert 0, "Invalid task given"
@@ -184,10 +190,10 @@ def do_rsync(args):
 	lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(args.remote_hostname)
 
 	if args.task in ["rsync_to_container", "rsync_from_container"]:
-		if args.arg2 == "delete":
-			delete = True
-		elif args.arg2 == "keep":
+		if args.arg2 == "":
 			delete = False
+		elif args.arg2 == "delete":
+			delete = True
 		else:
 			assert 0, "Invalid arg2 argument passed, should be 'delete' or 'keep'"
 
@@ -234,6 +240,33 @@ def open_workspace_in(args):
 	script_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "open_workspace_in_container.sh")
 
 	lxdev.run_local_gui_cmd(f"{script_path} {host} {local_working_dir} {remote_working_dir} {lxd_container_name}")
+
+def run_program_in(args):
+	# this was made in order to more easily run programs in wine in a container
+	# syntax: lxdev run_program_in <container> <workingdir> <programname> <arguments>
+	# e.g.  lxdev run_program_in lxd_zm-fx3-dev $(pwd) wine "\"~/.wine/drive_c/users/ubuntu/Local\ Settings/Application\ Data/Programs/ADI/LTspice/LTspice.exe\""
+	assert "home" in os.getcwd(), "this function is defined for folders within a host users home directory only"
+
+	host = args.remote_hostname
+	lxd_container_name = assert_we_can_extract_lxd_name_from_hostname(host)
+	local_working_dir = os.path.abspath(args.arg2)
+	programname = args.arg3
+	arguments = args.arg4
+
+	with lxdev.RemoteClient(
+		host = host, # e.g. lxd_doc-dev
+		lxd_container_name = lxd_container_name,
+		local_working_directory = local_working_dir
+		) as ssh_remote_client:
+			remote_working_dir = ssh_remote_client.remote_working_directory
+
+			# env_dict = {"DISPLAY":":0", "WINEPREFIX":"/home/ubuntu/.wine"}
+			# ssh_remote_client.execute_commands(f"{programname_and_arguments}", environment=env_dict)
+	
+	script_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), "run_program_in_container.sh")
+	
+	lxdev.run_local_gui_cmd(f"{script_path} {host} {local_working_dir} {remote_working_dir} {lxd_container_name} {programname} {arguments}")
+
 
 
 def assert_we_can_extract_lxd_name_from_hostname(hostname):
