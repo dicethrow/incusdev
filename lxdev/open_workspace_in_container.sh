@@ -32,7 +32,7 @@ else
 	backup_name="backup_of_"$gitrootdir".zip"
 	backup_name=${backup_name//\//\-} # replace forbidden slashes with dashes
 	echo "Starting backup to: "$backup_name
-	zip -q -r /tmp/$backup_name .
+	zip -q -r /tmp/$backup_name $gitrootdir
 	echo "Backup done"
 
 	# overwrite the current files on the host with the changes in the container
