@@ -10,6 +10,8 @@ container_lxd_name=$4
 programname=$5
 arguments=$6
 
+gitrootdir=$(git rev-parse --show-toplevel)
+
 # change directory to current location of this .sh file, from https://stackoverflow.com/questions/3349105/how-can-i-set-the-current-working-directory-to-the-directory-of-the-script-in-ba
 # cd "${0%/*}" # yuck syntax
 cd $local_working_dir
@@ -33,14 +35,14 @@ else
 	echo "Backing up local files, then getting changes from container"
 	
 	# backup the current files on the host, in case they contain important changes that we don't want to lose
-	backup_name="backup_of_"$(pwd)".zip"
+	backup_name="backup_of_"$gitrootdir".zip"
 	backup_name=${backup_name//\//\-} # replace forbidden slashes with dashes
 	echo "Starting backup to: "$backup_name
 	zip -q -r /tmp/$backup_name .
 	echo "Backup done"
 
 	# overwrite the current files on the host with the changes in the container
-	(cd $(git rev-parse --show-toplevel); lxdev rsync_from_container $container delete)
+	(cd $gitrootdir; lxdev rsync_from_container $container delete)
 fi
 
 # determine and flag if program is alreay running, 
@@ -54,7 +56,7 @@ else
 fi
 
 # copy over files
-(cd $(git rev-parse --show-toplevel); lxdev rsync_to_container $container delete)
+(cd $gitrootdir; lxdev rsync_to_container $container delete)
 
 # 16nov2022 (noticed this line was removed a few weeks ago, adding it back in)
 # note that the ownership of files is copied over as a code that may not align with the user in the container,
@@ -83,7 +85,7 @@ if ssh $container -- test -f $flag_program_already_running; then
 else
 	# overwrite the current files on the host with the changes in the container
 	# if this script returns from codium() immediately, it won't contain changes, hence will be redundant
-	(cd $(git rev-parse --show-toplevel); lxdev rsync_from_container $container delete)
+	(cd $gitrootdir; lxdev rsync_from_container $container delete)
 
 	ssh $container -- touch $flag_success	
 	echo "Success"
