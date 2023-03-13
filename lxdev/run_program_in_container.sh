@@ -12,6 +12,15 @@ arguments=$6
 
 gitrootdir=$(git rev-parse --show-toplevel)
 
+# replace special characters with dashes from these strings 
+# file name to make an almost-unique non-special representative string
+unspecialprogramname=$(echo $programname | tr "/\ ;.()" -)
+unspecialgitrootdir=$(echo $gitrootdir | tr "/\ ;.()" -)
+
+flag_success="."$unspecialprogramname"_flag_success"
+flag_program_already_running="."$unspecialprogramname"_flag_already_running"
+
+
 # change directory to current location of this .sh file, from https://stackoverflow.com/questions/3349105/how-can-i-set-the-current-working-directory-to-the-directory-of-the-script-in-ba
 # cd "${0%/*}" # yuck syntax
 cd $local_working_dir
@@ -23,10 +32,6 @@ cd $local_working_dir
 # echo $programname
 # echo $arguments
 
-flag_success="."$programname"_flag_success"
-flag_program_already_running="."$programname"_flag_already_running"
-
-
 if ssh $container -- test -f $flag_success; then
 	# remove the success flag
 	ssh $container -- rm $flag_success
@@ -35,8 +40,7 @@ else
 	echo "Backing up local files, then getting changes from container"
 	
 	# backup the current files on the host, in case they contain important changes that we don't want to lose
-	backup_name="backup_of_"$gitrootdir".zip"
-	backup_name=${backup_name//\//\-} # replace forbidden slashes with dashes
+	backup_name="backup_of_"$unspecialgitrootdir".zip"
 	echo "Starting backup to: "$backup_name
 	zip -q -r /tmp/$backup_name $gitrootdir
 	echo "Backup done"
@@ -47,12 +51,15 @@ fi
 
 # determine and flag if program is alreay running, 
 # as progam may not be able to be started completely independently within a container
-if ssh $container -- pgrep $programname > /dev/null 2>&1; then
+# note! this check assumes that the $programname doesnt contain any special characters etc,
+# which is why $unspecialprogramname is used; which will either be the same as the original,
+# or be a harmless command that will fail
+if ssh $container -- pgrep $unspecialprogramname > /dev/null 2>&1; then
 	ssh $container -- touch $flag_program_already_running
-	echo $programname" is already running"
+	echo $unspecialprogramname" is already running"
 else
 	ssh $container -- rm $flag_program_already_running > /dev/null 2>&1 # to silence it if it doesn't exist
- 	echo $programname" is not already running"
+ 	echo $unspecialprogramname" is not already running"
 fi
 
 # copy over files

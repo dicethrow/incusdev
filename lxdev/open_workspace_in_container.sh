@@ -10,6 +10,14 @@ container_lxd_name=$4
 
 gitrootdir=$(git rev-parse --show-toplevel)
 
+# replace special characters with dashes from these strings 
+# file name to make an almost-unique non-special representative string
+# safeflagrootname=$(echo $programname | tr "/\ ;.()" -)
+safebackuprootname=$(echo $gitrootdir | tr "/\ ;.()" -)
+
+# flag_success="."$safeflagrootname"_flag_success"
+# flag_program_already_running="."$safeflagrootname"_flag_already_running"
+
 
 # 22oct22 added flag files to indicate whether the last run failed - ie to prevent overwriting data that wasn't copied back last time
 
@@ -29,8 +37,7 @@ else
 	echo "Backing up local files, then getting changes from container"
 	
 	# backup the current files on the host, in case they contain important changes that we don't want to lose
-	backup_name="backup_of_"$gitrootdir".zip"
-	backup_name=${backup_name//\//\-} # replace forbidden slashes with dashes
+	backup_name="backup_of_"$safebackuprootname".zip"
 	echo "Starting backup to: "$backup_name
 	zip -q -r /tmp/$backup_name $gitrootdir
 	echo "Backup done"
