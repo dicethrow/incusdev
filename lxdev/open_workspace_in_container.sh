@@ -56,14 +56,18 @@ else
  	echo "Codium is not already running"
 fi
 
-# copy over files
-(cd $gitrootdir; lxdev rsync_to_container $container delete)
+
 
 # 16nov2022 (noticed this line was removed a few weeks ago, adding it back in)
 # note that the ownership of files is copied over as a code that may not align with the user in the container,
 # so lets set container user ownership of these files
 # lxdev.run_local_cmd(f"lxc shell {lxd_container_name} -- sh -c \"chown -R ubuntu:ubuntu {remote_working_dir}\"", print_cmd=True, print_result=True)		
 # huh! why does the command work below, but not when run as the line above, in python?
+lxc shell $container_lxd_name -- sh -c "chown -R ubuntu:ubuntu /home/ubuntu/from_host/" # mod on 14apr23 as the parent folder/s seem to still have the src users UID (e..g 1002 vs 1000)
+
+# copy over files
+(cd $gitrootdir; lxdev rsync_to_container $container delete)
+
 lxc shell $container_lxd_name -- sh -c "chown -R ubuntu:ubuntu $remote_working_dir"
 
 
@@ -92,4 +96,3 @@ else
 	ssh $container -- touch .flag_success	
 	echo "Success"
 fi
-
