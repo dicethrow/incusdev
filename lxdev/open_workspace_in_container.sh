@@ -72,7 +72,7 @@ lxc shell $container_lxd_name -- sh -c "chown -R ubuntu:ubuntu $remote_working_d
 
 
 # open codium
-ssh $container -- codium "${remote_working_dir}/*.code-workspace" --disable-gpu #--no-xshm #1> /dev/null 2> /dev/null # assuming there's only one .code-workspace file
+ssh $container -- "source ~/.profile && " codium "${remote_working_dir}/*.code-workspace" --disable-gpu #--no-xshm #1> /dev/null 2> /dev/null # assuming there's only one .code-workspace file
 # --no-xshm is from https://github.com/microsoft/vscode/issues/101069, as I am getting that grey screen error the first attempt usually
 # this source says that a warning message is printed, but can be ignored https://github.com/microsoft/vscode/issues/111372
 

@@ -77,7 +77,7 @@ lxc shell $container_lxd_name -- sh -c "chown -R ubuntu:ubuntu $remote_working_d
 
 
 # open program
-ssh $container -- $programname $arguments 
+ssh $container -- "source ~/.profile && " $programname $arguments 
 
 ### gets to this point if program was closed, often doesn't get to this point if the computer is shutdown ###
 
