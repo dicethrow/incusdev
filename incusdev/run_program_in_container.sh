@@ -21,6 +21,12 @@ unspecialgitrootdir=$(echo $gitrootdir | tr "/\ ;.()" -)
 flag_success="."$unspecialprogramname"_flag_success"
 flag_program_already_running="."$unspecialprogramname"_flag_already_running"
 
+# check if program is installed in container
+if ! ssh $container -- command -v $programname &> /dev/null
+then
+    echo $programname could not be found
+    exit 1
+fi
 
 # change directory to current location of this .sh file, from https://stackoverflow.com/questions/3349105/how-can-i-set-the-current-working-directory-to-the-directory-of-the-script-in-ba
 # cd "${0%/*}" # yuck syntax

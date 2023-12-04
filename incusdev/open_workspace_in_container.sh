@@ -26,6 +26,13 @@ safebackuprootname=$(echo $gitrootdir | tr "/\ ;.()" -)
 # remote_dir=$(incusdev get_remote_working_directory $container keep)
 # echo "hello there! from "$container" and "$local_working_dir" and "$remote_working_dir
 
+# check if program is installed in container
+if ! ssh $container -- command -v codium &> /dev/null
+then
+    echo codium could not be found
+    exit 1
+fi
+
 # change directory to current location of this .sh file, from https://stackoverflow.com/questions/3349105/how-can-i-set-the-current-working-directory-to-the-directory-of-the-script-in-ba
 # cd "${0%/*}" # yuck syntax
 cd $local_working_dir

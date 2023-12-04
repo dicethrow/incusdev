@@ -196,14 +196,32 @@ def do_rsync(args):
 			delete = True
 		else:
 			assert 0, "Invalid arg2 argument passed, should be 'delete' or 'keep'"
+	
+	if args.task == "rsync_from_container":
+		# if the folder doesn't exist in the container, then
+		# assume the container is new, and that we actually want
+		# to run 'rsync_to_container' instead
+		with  incusdev.RemoteClient(
+		host = args.remote_hostname, # e.g. incus_doc-dev
+		incus_container_name = incus_container_name,
+		local_working_directory = "/home/" # the directory where this is called from
+		) as ssh_remote_client:
+			_, error = ssh_remote_client.execute_commands(f"stat {ssh_remote_client.get_remote_filename_from_local(os.getcwd())} > /dev/null", get_stderr=True)
+			for line in error:
+				if "No such file or directory" in line:
+					# then the directory is empty, 
+					# so we change the task to rsyncing over stuff
+					# but as this could overwrite stuff if it's not actually empty.. prompt?
+					assert("Y" == input("Warning! Attempting to rsync from a non-existent location. Instead, rsync to it, to give it some initial content? Y/n ")), "Unable to proceed"
+					args.task = "rsync_to_container"
 
 	with  incusdev.RemoteClient(
 		host = args.remote_hostname, # e.g. incus_doc-dev
 		incus_container_name = incus_container_name,
 		local_working_directory = os.getcwd() # the directory where this is called from
 		) as ssh_remote_client:
-
 			# print("Connected!")
+
 			if args.task == "rsync_to_container":
 				ssh_remote_client.rsync_to_container(delete=delete)
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+set -xeuo pipefail # failfast and be verbose
+
 
 # Copy the current git repo to the container,
 
