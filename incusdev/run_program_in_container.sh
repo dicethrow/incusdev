@@ -65,7 +65,10 @@ if ssh $container -- pgrep $unspecialprogramname > /dev/null 2>&1; then
 	ssh $container -- touch $flag_program_already_running
 	echo $unspecialprogramname" is already running"
 else
-	ssh $container -- rm $flag_program_already_running > /dev/null 2>&1 # to silence it if it doesn't exist
+	if ssh $container -- test -f $flag_program_already_running; then
+		# remove the $flag_program_already_running flag
+		ssh $container -- rm $flag_program_already_running
+	fi
  	echo $unspecialprogramname" is not already running"
 fi
 

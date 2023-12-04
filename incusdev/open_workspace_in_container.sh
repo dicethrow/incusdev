@@ -60,7 +60,10 @@ if ssh $container -- pgrep codium > /dev/null 2>&1; then
 	ssh $container -- touch .flag_codium_already_running
 	echo "Codium is already running"
 else
-	ssh $container -- rm .flag_codium_already_running > /dev/null 2>&1 # to silence it if it doesn't exist
+	if ssh $container -- test -f .flag_codium_already_running; then
+		# remove the flag_codium_already_running flag
+		ssh $container -- rm .flag_codium_already_running
+	fi
  	echo "Codium is not already running"
 fi
 
