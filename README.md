@@ -1,6 +1,6 @@
-# LXDEV: Container dev tools with LXD
+# incusdev: Container dev tools with incus
 
-This is a python library for interacting with LXD containers in order to do containerised development.
+This is a python library for interacting with incus containers in order to do containerised development.
 
 This repo is to reduce code duplication because it is so useful to me.
 
@@ -19,5 +19,5 @@ host $ pip3 install --editable <this-directory> #  so source code changes will b
 ## Todo
 
 - add tests
-- can we interact with lxdev using command line options / entry points?
-- demonstrate/implement how to make this work with non-LXD machines, such as remote machines and virtual machines that work with an ssh interface
+- can we interact with incusdev using command line options / entry points?
+- demonstrate/implement how to make this work with non-incus machines, such as remote machines and virtual machines that work with an ssh interface

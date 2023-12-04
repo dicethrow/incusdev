@@ -3,14 +3,14 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='lxdev',
+    name='incusdev',
     version='0.0.1',
-    packages=find_packages(include=['lxdev']),
+    packages=find_packages(include=['incusdev']),
 	install_requires=[
         "loguru",
 		"paramiko"
     ],
 	 entry_points = {
-        'console_scripts': ['lxdev=lxdev.standalone_cli:main'],
+        'console_scripts': ['incusdev=incusdev.standalone_cli:main'],
     }
 )

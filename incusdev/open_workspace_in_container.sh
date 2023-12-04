@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
+set -xeuo pipefail # failfast and be verbose
 
 # Copy the current git repo to the container, edit/build in vscode in the container, then on closing vscode, copy them back to the host.
 
-# 23oct22 moved this file to lxdev, so there's only one copy
+# 23oct22 moved this file to incusdev, so there's only one copy
 container=$1
 local_working_dir=$2
 remote_working_dir=$3
-container_lxd_name=$4
+container_incus_name=$4
 
 gitrootdir=$(git rev-parse --show-toplevel)
 
@@ -21,8 +22,8 @@ safebackuprootname=$(echo $gitrootdir | tr "/\ ;.()" -)
 
 # 22oct22 added flag files to indicate whether the last run failed - ie to prevent overwriting data that wasn't copied back last time
 
-# container="lxd_doc-dev"
-# remote_dir=$(lxdev get_remote_working_directory $container keep)
+# container="incus_doc-dev"
+# remote_dir=$(incusdev get_remote_working_directory $container keep)
 # echo "hello there! from "$container" and "$local_working_dir" and "$remote_working_dir
 
 # change directory to current location of this .sh file, from https://stackoverflow.com/questions/3349105/how-can-i-set-the-current-working-directory-to-the-directory-of-the-script-in-ba
@@ -43,7 +44,7 @@ else
 	echo "Backup done"
 
 	# overwrite the current files on the host with the changes in the container
-	(cd $gitrootdir; lxdev rsync_from_container $container delete)
+	(cd $gitrootdir; incusdev rsync_from_container $container delete)
 fi
 
 # determine and flag if codium is alreay running, 
@@ -61,14 +62,14 @@ fi
 # 16nov2022 (noticed this line was removed a few weeks ago, adding it back in)
 # note that the ownership of files is copied over as a code that may not align with the user in the container,
 # so lets set container user ownership of these files
-# lxdev.run_local_cmd(f"lxc shell {lxd_container_name} -- sh -c \"chown -R ubuntu:ubuntu {remote_working_dir}\"", print_cmd=True, print_result=True)		
+# incusdev.run_local_cmd(f"incus shell {incus_container_name} -- sh -c \"chown -R ubuntu:ubuntu {remote_working_dir}\"", print_cmd=True, print_result=True)		
 # huh! why does the command work below, but not when run as the line above, in python?
-lxc shell $container_lxd_name -- sh -c "chown -R ubuntu:ubuntu /home/ubuntu/from_host/" # mod on 14apr23 as the parent folder/s seem to still have the src users UID (e..g 1002 vs 1000)
+incus shell $container_incus_name -- sh -c "chown -R ubuntu:ubuntu /home/ubuntu/from_host/" # mod on 14apr23 as the parent folder/s seem to still have the src users UID (e..g 1002 vs 1000)
 
 # copy over files
-(cd $gitrootdir; lxdev rsync_to_container $container delete)
+(cd $gitrootdir; incusdev rsync_to_container $container delete)
 
-lxc shell $container_lxd_name -- sh -c "chown -R ubuntu:ubuntu $remote_working_dir"
+incus shell $container_incus_name -- sh -c "chown -R ubuntu:ubuntu $remote_working_dir"
 
 
 # open codium
@@ -91,7 +92,7 @@ if ssh $container -- test -f .flag_codium_already_running; then
 else
 	# overwrite the current files on the host with the changes in the container
 	# if this script returns from codium() immediately, it won't contain changes, hence will be redundant
-	(cd $gitrootdir; lxdev rsync_from_container $container delete)
+	(cd $gitrootdir; incusdev rsync_from_container $container delete)
 
 	ssh $container -- touch .flag_success	
 	echo "Success"

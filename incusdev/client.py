@@ -17,10 +17,10 @@ from .log import LOGGER
 def ensure_container_is_on(container_name):
 	# turn on the doc-dev container if it is not already on
 	any_started = False
-	for response_line in subprocess.check_output("lxc list".split()).decode("utf-8").split("\n"):
+	for response_line in subprocess.check_output("incus list".split()).decode("utf-8").split("\n"):
 		if all(x in response_line for x in [container_name, "STOPPED"]):
 			LOGGER.info(f"{container_name} was off, starting up")
-			subprocess.run(f"lxc start {container_name}".split())
+			subprocess.run(f"incus start {container_name}".split())
 			any_started = True
 	if any_started:	
 		LOGGER.info(f"waiting...")
@@ -39,13 +39,13 @@ class RemoteClient:
 	def __init__(
 		self,
 		host: str,
-		lxd_container_name: str,
+		incus_container_name: str,
 		local_working_directory: str,
 		user = "ubuntu",
 		ssh_config_filepath="~/.ssh/config",
 	):
 		self.host = host
-		self.lxd_container_name = lxd_container_name
+		self.incus_container_name = incus_container_name
 		self.local_working_directory = local_working_directory
 		self.remote_working_directory = self.get_remote_filename_from_local(self.local_working_directory)
 		self.user = user
@@ -57,7 +57,7 @@ class RemoteClient:
 	def __enter__(self):
 		"""Open SSH connection to remote host."""
 		try:
-			ensure_container_is_on(self.lxd_container_name)
+			ensure_container_is_on(self.incus_container_name)
 
 
 			# 10, 11 dec 2021
@@ -125,7 +125,7 @@ class RemoteClient:
 				#!/bin/sh
 				ctn="${1}"
 				shift
-				exec lxc exec "${ctn}" -- "$@"
+				exec incus exec "${ctn}" -- "$@"
 			""".lstrip("\n")))
 		os.chmod(fake_ssh_fp.name, 0x0777)
 		fake_ssh_fp.file.close()
@@ -137,11 +137,11 @@ class RemoteClient:
 				self.execute_commands(f"mkdir -p /home/ubuntu/Documents/Outputs") # make remote directory tree if it doesn't exist
 
 				log_str = f"Used rsync from local {rel_local_dir} to {self.host}:/home/ubuntu/Documents/{rel_remote_dir}"
-				cmd = f"rsync -avPz {rel_local_dir}/ -e {fake_ssh_fp.name} {self.lxd_container_name}:/home/ubuntu/Documents/{rel_remote_dir}/{' --delete' if delete else ''}"
+				cmd = f"rsync -avPz {rel_local_dir}/ -e {fake_ssh_fp.name} {self.incus_container_name}:/home/ubuntu/Documents/{rel_remote_dir}/{' --delete' if delete else ''}"
 
 			elif direction == "remote_to_local":
 				log_str = f"Used rsync from {self.host}:/home/ubuntu/Documents/{rel_remote_dir} to local {rel_local_dir}"
-				cmd = f"rsync -avPz -e {fake_ssh_fp.name} {self.lxd_container_name}:/home/ubuntu/Documents/{rel_remote_dir}/ {rel_local_dir}/{' --delete' if delete else ''}"
+				cmd = f"rsync -avPz -e {fake_ssh_fp.name} {self.incus_container_name}:/home/ubuntu/Documents/{rel_remote_dir}/ {rel_local_dir}/{' --delete' if delete else ''}"
 
 			LOGGER.opt(ansi=True).info(f"<green>{log_str}</green>")
 			
@@ -375,14 +375,14 @@ class RemoteClient:
 				#!/bin/sh
 				ctn="${1}"
 				shift
-				exec lxc exec "${ctn}" -- "$@"
+				exec incus exec "${ctn}" -- "$@"
 			""".lstrip("\n")))
 		os.chmod(fake_ssh_fp.name, 0x0777)
 		fake_ssh_fp.file.close()
 
 		success = True
 		try:
-			# assuming this will always be used with lxd with an ubuntu user,
+			# assuming this will always be used with incus with an ubuntu user,
 			abs_remote_dir = abs_remote_dir.replace("~", "/home/ubuntu")
 
 			if direction == "local_to_remote":
@@ -390,11 +390,11 @@ class RemoteClient:
 				# self.execute_commands(f"mkdir -p /home/ubuntu/Documents/Outputs") # make remote directory tree if it doesn't exist
 
 				log_str = f"Used rsync from local {abs_local_dir} to {self.host}:{abs_remote_dir}"
-				cmd = f"rsync -avz {abs_local_dir}/ -e {fake_ssh_fp.name} {self.lxd_container_name}:{abs_remote_dir}/{' --delete' if delete else ''}"
+				cmd = f"rsync -avz {abs_local_dir}/ -e {fake_ssh_fp.name} {self.incus_container_name}:{abs_remote_dir}/{' --delete' if delete else ''}"
 
 			elif direction == "remote_to_local":
 				log_str = f"Used rsync from {self.host}:{abs_remote_dir} to local {abs_local_dir}"
-				cmd = f"rsync -avz -e {fake_ssh_fp.name} {self.lxd_container_name}:{abs_remote_dir}/ {abs_local_dir}/{' --delete' if delete else ''}"
+				cmd = f"rsync -avz -e {fake_ssh_fp.name} {self.incus_container_name}:{abs_remote_dir}/ {abs_local_dir}/{' --delete' if delete else ''}"
 
 			# LOGGER.opt(ansi=True).info(f"<green>{log_str}</green>")
 			
