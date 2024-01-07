@@ -111,6 +111,11 @@ class RemoteClient:
 			
 		return remote_filename
 	
+	def get_local_fileneme_from_remote(self, remote_filename):
+		assert remote_filename.startswith("/home/ubuntu/from_host"), f"remote_filename must start with /home/ubuntu/from_host"
+		local_filename = remote_filename.replace("/home/ubuntu/from_host/", "/home/")
+		return local_filename
+	
 	def rsync(self, delete = False, direction = "local_to_remote", rel_local_dir = "content", rel_remote_dir = "invalid_dir"):
 		# 10dec2021 from https://discuss.linuxcontainers.org/t/rsync-files-into-container-from-host/822
 		# rsync docs https://linux.die.net/man/1/rsync

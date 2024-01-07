@@ -1,4 +1,4 @@
-import os, sys, subprocess
+import os, sys, subprocess, time
 
 def as_array(result_or_error):
 	return result_or_error.decode("utf-8").split("\n")[:-1] if result_or_error != None else []
@@ -8,11 +8,21 @@ def run_local_cmd(cmd, **kwargs):
 	print_result = kwargs.pop("print_result", False)
 	print_error = kwargs.pop("print_error", False)
 	print_cmd = kwargs.pop("print_cmd", False)
+	
+	timeout_sec = kwargs.pop("timeout_sec", None)
 
 	if print_cmd:
 		print("\n$ " + cmd)
 
 	p = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
+	
+	# if timeout, sleep for that time, then kill it
+	# that will make p.communicate() nonblocking
+	# technique from https://stackoverflow.com/questions/21936597/blocking-and-non-blocking-subprocess-calls
+	if timeout_sec != None:
+		time.sleep(timeout_sec)
+		p.terminate() 
+	
 	output, error = p.communicate()
 	output = as_array(output)
 	error = as_array(error)

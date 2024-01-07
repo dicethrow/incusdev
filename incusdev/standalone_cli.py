@@ -11,6 +11,11 @@ defined_tasks = [
 	"init_incus_git-server_on_host",
 	"init_incus_git-server_access_in_container",
 	# "refresh_repo_in_host_and_dev_container", # using git for this purpose seems obfuscatory, too complex
+	
+	# in a new window, open nautilus to the path that made the incus_git-server remote
+	# this command only makes sense for submodules, as it would open the working directory
+	# it's a convenience / workflow shortcut
+	"open_local_workingdir_from_git_url_for",
 
 	"open_workspace_in",
 	"run_program_in"
@@ -40,6 +45,9 @@ def main():
 	
 	elif args.task == "init_incus_git-server_access_in_container":
 		init_incus_git_server_access_in_container(args)
+
+	elif args.task == "open_local_workingdir_from_git_url_for":
+		open_local_workingdir_from_git_url_for(args)
 
 	elif args.task in ["rsync_to_container", "rsync_from_container", "get_remote_working_directory"]:
 		do_rsync(args)
@@ -182,7 +190,35 @@ def init_incus_git_server_access_in_container(args):
 	"""
 
 
+def open_local_workingdir_from_git_url_for(args):
+	# usage example: incusdev open_local_workingdir_from_git_url_for incus_git-server origin
 
+	# 4jan24
+	# this assumes that
+	# - you have a working directory for this repo on the host pc
+	# - you also have many instances of this repo being cloned as a submodule
+	# - that you have used incusdev to make a local incus  repo on incus_git-server
+
+	# and you want to be able to open the directory of the main working directory
+	# so this script will find, then open in nautilus, the main working directory
+	# by extracting the local path from the incus_git-server remote url
+
+	assert "home" in os.getcwd(), "this function is defined for folders within a host users home directory only"
+
+	git_remote_name = args.arg2 # e.g. incus_git-server, origin, aws_codecommit
+
+	host = "incus_git-server" if args.remote_hostname == "none" else args.remote_hostname
+	incus_container_name = assert_we_can_extract_incus_name_from_hostname(host)
+	with  incusdev.RemoteClient(
+		host = host, # e.g. incus_doc-dev
+		incus_container_name = incus_container_name,
+		local_working_directory = os.getcwd() # the directory where this is called from
+		) as ssh_remote_client:
+			result, error = incusdev.run_local_cmd(f"git remote get-url {git_remote_name}", print_result=True, print_error=True, print_cmd=True)# | sed 's:.*/from_host/'$USER'/::' | sed 's/\..*//'")
+			remote_path  = result[0].split(".git")[0].split(f"{host}:")[1]
+			local_path = ssh_remote_client.get_local_fileneme_from_remote(remote_path) 
+
+	incusdev.run_local_cmd(f"nautilus {local_path} --new-window")
 
 def do_rsync(args):
 	assert "home" in os.getcwd(), "this function is defined for folders within a host users home directory only"
