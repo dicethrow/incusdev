@@ -215,6 +215,9 @@ def open_local_workingdir_from_git_url_for(args):
 		local_working_directory = os.getcwd() # the directory where this is called from
 		) as ssh_remote_client:
 			result, error = incusdev.run_local_cmd(f"git remote get-url {git_remote_name}", print_result=True, print_error=True, print_cmd=True)# | sed 's:.*/from_host/'$USER'/::' | sed 's/\..*//'")
+			
+			assert "incus_git-server" in result[0], "Error! Looks like this command is not being called from a submodule directory, where the submodule refers to a local origin"
+
 			remote_path  = result[0].split(".git")[0].split(f"{host}:")[1]
 			local_path = ssh_remote_client.get_local_fileneme_from_remote(remote_path) 
 
